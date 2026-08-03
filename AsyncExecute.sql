@@ -16,7 +16,7 @@ as
 	set nocount, xact_abort on;
 
 	-- Build the set of delete instructions.
-	-- Cast as max so it can hadle lots of jobs.
+	-- Cast as max so it can handle lots of jobs.
 	declare @JobDeleteStatements nvarchar(max) = (
 		select STRING_AGG(cast('EXEC msdb.dbo.sp_delete_job @job_name = ''' + name + ''';' as varchar(max)), ' ')
 		from msdb.dbo.sysjobs
@@ -31,7 +31,10 @@ CREATE OR ALTER proc [Async].[p_CountJobsRunning]
 	@JobNamePrefix sysname = 'Temporary Session Job - ' 
 as
 	/*
-		The key to doing this correctly is the session_id. It has to be the latest.
+		This proc returns the number jobs running
+		with names that begin with the value of @JobNamePrefix.
+		The key to doing this correctly is the session_id. 
+		It has to be the latest from msdb.dbo.syssessions.
 
 		declare @JobsRunningCount int = 1;
 		while @JobsRunningCount > 0 begin;
@@ -45,7 +48,8 @@ as
 		SELECT COUNT(*)
 		FROM msdb.dbo.sysjobactivity a
 		JOIN msdb.dbo.sysjobs j ON a.job_id = j.job_id
-		WHERE j.name like '' + '%'
+		WHERE j.name like @JobNamePrefix + '%'
+			-- Only check the latest session_id.
 			and a.session_id = (SELECT MAX(session_id) FROM msdb.dbo.syssessions)
 			AND a.start_execution_date IS NOT NULL
 			AND a.stop_execution_date IS NULL
@@ -57,6 +61,8 @@ CREATE or alter function [Async].[f_SessionMessage] (
 ) 
 returns table as return (
 	/*
+		
+
 		SELECT * FROM [Async].[f_SessionMessage](DEFAULT);
 
 		SELECT * 
