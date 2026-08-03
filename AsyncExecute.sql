@@ -193,6 +193,15 @@ as
 		EXEC msdb.dbo.sp_start_job @job_name = @JobName;
 	end; -- End while @SessionNumber <= @SessionCount
 
+	print concat_ws(' - ', sysdatetime(), 'Let the jobs get started.');
+
+	-- Let the jobs get started.
+	WAITFOR DELAY '00:00:05.000'; -- Wait 5 seconds.
+
+	print concat_ws(' - ', sysdatetime(), 'Report on locks.');
+
+	select * from [Async].[v_Locks] order by TableName, IndexName, SessionID, ReqourceType;
+
 	print concat_ws(' - ', sysdatetime(), 'Wait for all the jobs to complete.');
 
 	-- Wait until all of the jobs are done.
@@ -234,49 +243,10 @@ create or alter proc [Async].[p_GetTransactionIsolationLevel] as
 		and db.database_id = db_id();
 go
 
-create or alter proc [Async].[p_GetLocks] as
-	/*
-		EXEC [Async].[p_GetLocks];
-	*/
-	set nocount, xact_abort on;
-
-	create table #Lock (
-		spid		smallint		NULL,
-		[dbid]		smallint		NOT NULL,
-		[ObjId]		int				NOT NULL,
-		IndId		smallint		NOT NULL,
-		[Type]		nvarchar(4)		NULL,
-		[Resource]	nvarchar(32)	NULL,
-		Mode		nvarchar(8)		NULL,
-		[Status]	nvarchar(5)		NULL
-	);
-
-	insert #Lock exec sp_lock;
-
-	select object_schema_name(l.[ObjId]) + '.' + object_name(l.[ObjId]) as TableName
-		, i.[name] as IndexName
-		, l.spid
-		, isnull(LT.[Name], l.[Type]) as [Type]
-		, l.Mode
-		, COUNT(*) as Occurs
-	from #Lock l
-	left join sys.indexes i on i.[object_id] = l.[ObjId] and i.index_id = l.IndId
-	left join (values
-		('RID', 'Row'),
-		('KEY', 'Key Range'),
-		('PAG', 'Page'),
-		('EXT', 'Extent'),
-		('TAB', 'Table')
-	) LT ([Type], [Name]) on LT.[Type] = l.[Type]
-	where [dbid] = DB_ID()
-	group by l.spid, l.[dbid], l.[ObjId], l.Mode, l.[Type], LT.[Name], i.[name]
-	order by TableName;
-go
-
-create or alter function [Async].[f_TranLocks]() returns table return (
+create or alter view [Async].[v_Locks] as
 	/*
 		select * 
-		from [Async].[f_TranLocks]()
+		from [Async].[v_Locks]
 		order by TableName, IndexName, SessionID;
 	*/
 	with indexes as (
@@ -309,7 +279,6 @@ create or alter function [Async].[f_TranLocks]() returns table return (
 		, i.IndexName
 		, l.request_owner_type
 		, t.blocking_session_id
-);
 go
 
 
