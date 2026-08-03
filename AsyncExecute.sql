@@ -61,7 +61,14 @@ CREATE or alter function [Async].[f_SessionMessage] (
 ) 
 returns table as return (
 	/*
-		
+		This function returns a resultset 
+		with 6 columns and a row for each job or session.
+			- SessionNumber - It's cut from the job name.
+			- RunStatus - 5 text values. It's usually Succeeded or Failed.
+			- sql_severity - Severity number of SQL Server error. Usually zero.
+			- message - From print statements and error messages.
+			- StartTime
+			- RunSeconds
 
 		SELECT * FROM [Async].[f_SessionMessage](DEFAULT);
 
@@ -71,7 +78,7 @@ returns table as return (
 		where TRY_CAST(v.value as int) is not null;
 	*/
 	select cast(trim(substring(
-			j.name, 
+			j.[name], 
 			len(@JobNamePrefix) + 1, 
 			99
 		)) as int) as SessionNumber
@@ -81,7 +88,7 @@ returns table as return (
 			choose(h.run_status, 'Succeeded', 'Retry', 'Canceled', 'In progress')
 		) as RunStatus
 		, h.sql_severity
-		, h.message
+		, h.[message]
 		, MSDB.DBO.AGENT_DATETIME(h.run_date, h.run_time) as StartTime
 		, h.run_duration / 10000 * 3600 
 			+ h.run_duration % 10000 / 100 
@@ -104,11 +111,11 @@ as
 		The sp_start_job command returns imediately event though the job is still running.
 		This proc does not complete until all the jobs have completed.
 
-		@SessionCount - is the number of jobs you want.
-		@CommandText - Is the SQL instructions that each job will execute.
-			That command tect can contain "[SessionNumber]".
-			It gets replaced with a number for each job.
-		@CleanUpFlag - 1 means all the jobs get deleted at the end.
+			@SessionCount - is the number of jobs you want.
+			@CommandText - Is the SQL instructions that each job will execute.
+				That command tect can contain "[SessionNumber]".
+				It gets replaced with a number for each job.
+			@CleanUpFlag - 1 means all the jobs get deleted at the end.
 
 		EXEC [Async].[p_Execute] 5, 'WAITFOR DELAY ''00:01:00.000'';', 0; -- Wait 1 min.
 
@@ -225,6 +232,45 @@ create or alter proc [dbo].[p_GetTransactionIsolationLevel] as
 	cross join sys.databases db
 	where uo.SetOption = 'isolation level'
 		and db.database_id = db_id();
+go
+
+create or alter proc [dbo].[p_GetLocks] as
+	/*
+		EXEC [dbo].[p_GetLocks];
+	*/
+	set nocount, xact_abort on;
+
+	create table #Lock (
+		spid		smallint		NULL,
+		[dbid]		smallint		NOT NULL,
+		[ObjId]		int				NOT NULL,
+		IndId		smallint		NOT NULL,
+		[Type]		nvarchar(4)		NULL,
+		[Resource]	nvarchar(32)	NULL,
+		Mode		nvarchar(8)		NULL,
+		[Status]	nvarchar(5)		NULL
+	);
+
+	insert #Lock exec sp_lock;
+
+	select object_schema_name(l.[ObjId]) + '.' + object_name(l.[ObjId]) as TableName
+		, i.[name] as IndexName
+		, l.spid
+		, isnull(LT.[Name], l.[Type]) as [Type]
+		, l.Mode
+		, COUNT(*) as Occurs
+	from #Lock l
+	left join sys.indexes i on i.[object_id] = l.[ObjId] and i.index_id = l.IndId
+	left join (values
+		('RID', 'Row'),
+		('KEY', 'Key Range'),
+		('PAG', 'Page'),
+		('EXT', 'Extent'),
+		('TAB', 'Table')
+	) LT ([Type], [Name]) on LT.[Type] = l.[Type]
+	where [dbid] = DB_ID()
+	group by l.spid, l.[dbid], l.[ObjId], l.Mode, l.[Type], LT.[Name], i.[name]
+	order by TableName;
 go
 
 
