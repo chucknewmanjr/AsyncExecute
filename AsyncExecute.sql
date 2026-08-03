@@ -212,9 +212,9 @@ as
 	print concat_ws(' - ', sysdatetime(), 'All done.');
 go
 
-create or alter proc [dbo].[p_GetTransactionIsolationLevel] as
+create or alter proc [Async].[p_GetTransactionIsolationLevel] as
 	/*
-		EXEC [dbo].[p_GetTransactionIsolationLevel];
+		EXEC [Async].[p_GetTransactionIsolationLevel];
 	*/
 	set nocount, xact_abort on;
 
@@ -234,9 +234,9 @@ create or alter proc [dbo].[p_GetTransactionIsolationLevel] as
 		and db.database_id = db_id();
 go
 
-create or alter proc [dbo].[p_GetLocks] as
+create or alter proc [Async].[p_GetLocks] as
 	/*
-		EXEC [dbo].[p_GetLocks];
+		EXEC [Async].[p_GetLocks];
 	*/
 	set nocount, xact_abort on;
 
@@ -273,14 +273,13 @@ create or alter proc [dbo].[p_GetLocks] as
 	order by TableName;
 go
 
-create or alter function f_TranLocks() returns table return (
+create or alter function [Async].[f_TranLocks]() returns table return (
 	/*
 		select * 
-		from [dbo].[f_TranLocks]()
+		from [Async].[f_TranLocks]()
 		order by TableName, IndexName, SessionID;
 	*/
 	with indexes as (
-		-- KEY, PAGE. Not OBJECT
 		select p.hobt_id, p.object_id, i.name as IndexName
 		from sys.indexes i 
 		join sys.partitions p
