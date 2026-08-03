@@ -273,4 +273,44 @@ create or alter proc [dbo].[p_GetLocks] as
 	order by TableName;
 go
 
+create or alter function f_TranLocks() returns table return (
+	/*
+		select * 
+		from [dbo].[f_TranLocks]()
+		order by TableName, IndexName, SessionID;
+	*/
+	with indexes as (
+		-- KEY, PAGE. Not OBJECT
+		select p.hobt_id, p.object_id, i.name as IndexName
+		from sys.indexes i 
+		join sys.partitions p
+		on i.object_id = p.object_id and i.index_id = p.index_id
+	)
+	select ISNULL(
+			OBJECT_SCHEMA_NAME(i.object_id) + '.' + OBJECT_NAME(i.object_id),
+			OBJECT_SCHEMA_NAME(o.object_id) + '.' + OBJECT_NAME(o.object_id)
+		) as TableName
+		, i.IndexName
+		, l.request_session_id as SessionID
+		, l.resource_type as ReqourceType
+		, l.request_mode as Mode
+		, COUNT(*) as Occurs
+		, l.request_owner_type as OwnerType
+		, t.blocking_session_id as BlockingSessionID
+	from sys.dm_tran_locks l
+	left join sys.objects o on o.object_id = l.resource_associated_entity_id -- OBJECT
+	left join indexes i on i.hobt_id = l.resource_associated_entity_id -- KEY, PAGE
+	left join sys.dm_os_waiting_tasks t on t.resource_address = l.lock_owner_address
+	where resource_database_id = DB_ID()
+	group by l.resource_type
+		, l.request_mode
+		, l.request_session_id
+		, o.object_id
+		, i.object_id
+		, i.IndexName
+		, l.request_owner_type
+		, t.blocking_session_id
+);
+go
+
 
