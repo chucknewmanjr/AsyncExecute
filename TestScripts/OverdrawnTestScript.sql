@@ -5,7 +5,7 @@ drop table if exists [dbo].[Balance];
 go
 
 create table [dbo].[Balance] (
-	UserID int not null identity primary key clustered,
+	UserID int not null identity constraint PK primary key clustered,
 	Amount decimal(19,2) not null,
 );
 go
@@ -14,8 +14,8 @@ set nocount on;
 go
 
 insert into [dbo].[Balance] (Amount) 
-values (100000000);
-go 5 -- <== Do the insert many times.
+values (100000000000000);
+go 100 -- <== Do the insert this many times.
 
 create or alter proc [dbo].[p_Withdraw] as
 	/*
@@ -67,14 +67,23 @@ create or alter proc [dbo].[p_Withdraw] as
 	end;
 go
 
-EXEC [Async].[p_Execute] 10, 'EXEC [dbo].[p_Withdraw];', 0; 
---EXEC [dbo].[p_Withdraw];
+EXEC [Async].[p_GetTransactionIsolationLevel];
 
-select * from [Async].[f_SessionMessage](default) order by 1;
+EXEC [Async].[p_Execute] 100, 'EXEC [dbo].[p_Withdraw];'; 
 
-select Amount, count(*) as [RowCount]
-from [dbo].[Balance] 
-group by Amount 
-order by Amount;
+WAITFOR DELAY '00:00:01.000'; -- Wait a sec.
+
+select * 
+from [Async].[v_Locks] 
+where SessionID <> @@SPID and ResourceType <> 'DATABASE'
+order by TableName, IndexName, SessionID, ResourceType;
+
+select Amount, COUNT(*) from [dbo].[Balance] group by Amount;
+
+EXEC [Async].[p_Wait];
+
+select * from [Async].[f_SessionMessage](DEFAULT) order by 1;
+
+select Amount, COUNT(*) from [dbo].[Balance] group by Amount;
 
 

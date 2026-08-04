@@ -260,10 +260,9 @@ create or alter view [Async].[v_Locks] as
 		) as TableName
 		, i.IndexName
 		, l.request_session_id as SessionID
-		, l.resource_type as ReqourceType
+		, l.resource_type as ResourceType
 		, l.request_mode as Mode
 		, COUNT(*) as Occurs
-		--, l.request_owner_type as OwnerType
 		, t.blocking_session_id as BlockingSessionID
 	from sys.dm_tran_locks l
 	left join sys.objects o on o.object_id = l.resource_associated_entity_id -- OBJECT
@@ -276,7 +275,6 @@ create or alter view [Async].[v_Locks] as
 		, o.object_id
 		, i.object_id
 		, i.IndexName
-		--, l.request_owner_type
 		, t.blocking_session_id;
 go
 
