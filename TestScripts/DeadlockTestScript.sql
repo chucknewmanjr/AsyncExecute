@@ -53,33 +53,34 @@ as
 			commit;
 		end try
 		begin catch;
-			rollback;
 			print concat('~', error_line(), '~');
+			rollback;
 			throw;
 		end catch;
 	end;
 go
 
 EXEC [Async].[p_GetTransactionIsolationLevel];
-go
 
-EXEC [Async].[p_Execute] 10, 'EXEC [dbo].[p_PerformTransactions] ''[SessionNumber]'';', 0;
-go
+EXEC [Async].[p_Execute] 10, 'EXEC [dbo].[p_PerformTransactions] ''[SessionNumber]'';';
+
+WAITFOR DELAY '00:00:05.000'; -- Wait 5 seconds.
+
+select * from [Async].[v_Locks] order by TableName, IndexName, SessionID, ReqourceType;
+
+EXEC [Async].[p_Wait];
 
 with ErrorLines as (
+	-- Cut the LineNumber out of the message text.
 	select m.SessionNumber, v.value as LineNumber
 	FROM [Async].[f_SessionMessage](DEFAULT) m
 	cross apply string_split(message, '~') v
 	where TRY_CAST(v.value as int) is not null
 )
-select cast(sm.SessionNumber as int) as SessionNumber
-	, sm.RunStatus
-	, sm.RunSeconds
-	, sm.[Message]
-	, el.LineNumber
+select sm.*, el.LineNumber
 from [Async].[f_SessionMessage](DEFAULT) sm
 left join ErrorLines el on el.SessionNumber = sm.SessionNumber
-order by 1;
+order by sm.SessionNumber;
 go
 
 

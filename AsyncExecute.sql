@@ -10,8 +10,11 @@ as
 		It does not check if that jobs are running.
 		That's what [Async].[p_CountJobsRunning] is for.
 
-		EXEC [Async].[p_DeleteJobs];
 		EXEC [Async].[p_DeleteJobs] @JobNamePrefix = 'Temporary Session Job - ';
+
+		declare @JobsRunningCount tinyint;
+		EXEC @JobsRunningCount = [Async].[p_CountJobsRunning];
+		if @JobsRunningCount = 0 EXEC [Async].[p_DeleteJobs];
 	*/
 	set nocount, xact_abort on;
 
@@ -102,8 +105,7 @@ go
 
 create or alter proc [Async].[p_Execute]
 	@SessionCount tinyint, -- Number of jobs to create.
-	@CommandText nvarchar(max), -- Include [SessionNumber] if you want.
-	@CleanUpFlag bit = 0 -- If 1, delete the jobs at the end.
+	@CommandText nvarchar(max) -- Include [SessionNumber] if you want.
 as
 	/*
 		Creates and executes jobs that all run at the same time.
@@ -193,32 +195,29 @@ as
 		EXEC msdb.dbo.sp_start_job @job_name = @JobName;
 	end; -- End while @SessionNumber <= @SessionCount
 
-	print concat_ws(' - ', sysdatetime(), 'Let the jobs get started.');
+	print concat_ws(' - ', sysdatetime(), 'All started.');
+go
 
-	-- Let the jobs get started.
-	WAITFOR DELAY '00:00:05.000'; -- Wait 5 seconds.
+create or alter proc [Async].[p_Wait]
+	@JobNamePrefix sysname = 'Temporary Session Job - '
+as
+	/*
+		EXEC [Async].[p_Wait];
+	*/
+	set nocount, xact_abort on;
 
-	print concat_ws(' - ', sysdatetime(), 'Report on locks.');
+	print concat_ws(' - ', sysdatetime(), 'Start waiting for jobs to end.');
 
-	select * from [Async].[v_Locks] order by TableName, IndexName, SessionID, ReqourceType;
+	declare @JobsRunningCount tinyint = 1;
 
-	print concat_ws(' - ', sysdatetime(), 'Wait for all the jobs to complete.');
-
-	-- Wait until all of the jobs are done.
-	set @JobsRunningCount = 255;
-
-	-- Wait until all of the jobs are done.
 	while @JobsRunningCount > 0 begin;
-		WAITFOR DELAY '00:00:05.000'; -- Wait 5 seconds.
+		WAITFOR DELAY '00:00:05.000'; -- 5 seconds.
 
 		-- Check again.
 		EXEC @JobsRunningCount = [Async].[p_CountJobsRunning] @JobNamePrefix = @JobNamePrefix;
 	end;
 
-	-- Delete the jobs maybe.
-	if @CleanUpFlag = 1 EXEC [Async].[p_DeleteJobs] @JobNamePrefix = @JobNamePrefix;
-
-	print concat_ws(' - ', sysdatetime(), 'All done.');
+	print concat_ws(' - ', sysdatetime(), 'Jobs are all done.');
 go
 
 create or alter proc [Async].[p_GetTransactionIsolationLevel] as
@@ -264,7 +263,7 @@ create or alter view [Async].[v_Locks] as
 		, l.resource_type as ReqourceType
 		, l.request_mode as Mode
 		, COUNT(*) as Occurs
-		, l.request_owner_type as OwnerType
+		--, l.request_owner_type as OwnerType
 		, t.blocking_session_id as BlockingSessionID
 	from sys.dm_tran_locks l
 	left join sys.objects o on o.object_id = l.resource_associated_entity_id -- OBJECT
@@ -277,8 +276,8 @@ create or alter view [Async].[v_Locks] as
 		, o.object_id
 		, i.object_id
 		, i.IndexName
-		, l.request_owner_type
-		, t.blocking_session_id
+		--, l.request_owner_type
+		, t.blocking_session_id;
 go
 
 
