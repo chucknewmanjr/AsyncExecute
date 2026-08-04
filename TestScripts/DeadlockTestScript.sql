@@ -1,6 +1,3 @@
-use DeadlockExperiment;
-go
-
 drop table if exists dbo.Transactions;
 drop table if exists dbo.TestData;
 go

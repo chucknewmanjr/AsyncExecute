@@ -1,6 +1,3 @@
-use OverdrawnExperiment;
-go
-
 drop table if exists [dbo].[Balance];
 go
 
